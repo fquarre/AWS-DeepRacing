@@ -8,7 +8,7 @@ def reward_function(params):
     speedMax = 2.5
 
     reward = 1e-3
-    #if we're off center by 125% or going into the wrong direction, leave
+    #if we're below 1m/s, off center by 80% or going into the wrong direction, leave
     if ((params['speed'] < 1) or (params["distance_from_center"] > ((params["track_width"]/2)*.8)) or (abs(trackDirection - params["heading"]) > 10)):
        reward = 1e-3 
     else:
