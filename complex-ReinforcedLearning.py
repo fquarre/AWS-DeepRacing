@@ -24,8 +24,11 @@ def reward_function(params): #Shepherd 3.5
     DEVIATIONTHRESHOLD = 10
     
     MAXSTEERINGANGLE_FLAT = 2
+    DIFFERENTIAL_FLAT = 1.5
     MAXSTEERINGANGLE_STARTCURVE = 5
+    DIFFERENTIAL_STARTCURVE = 2
     MAXSTEERINGANGLE_TURN = 10
+    # !TODO: potential error - angles (track and streering) should be correlated in some way
     
     heading = params['heading']
     trackWidth = params['track_width']
@@ -73,41 +76,39 @@ def reward_function(params): #Shepherd 3.5
     
     #if we're off center by 125% or going into the wrong direction, leave
     if ((speed < MINSPEED) or (distanceFromCenter > (trackWidth/2)) or (abs(trackDirection - heading) > DEVIATIONTHRESHOLD)):
-        debugList.append(-1) #SpeedReward --> -1 since we're failing
-        debugList.append(-1) #DistanceReward --> -1 since we're failing
-        reward = 1e-3 
+        debugList.extend((-1,-1)) #SpeedReward --> -1 since we're failing, positionReward --> -1 since we're failing
+        reward = 1e-3
     else:
-        if (abs(trackDifferential)) <= 1.5:            # If track is straight(ish)
-            reward += logiticDistFct(SPEED_COEF_FLAT,SPEED_INTER_FLAT,speed) #As fast as possible
-            debugList.append(logiticDistFct(SPEED_COEF_FLAT,SPEED_INTER_FLAT,speed))
-            reward += stdDistFct(DISTANCE_MU_FLAT,DISTANCE_SIGMA_FLAT,distanceFromCenter) #Snug to the center
-            debugList.append(stdDistFct(DISTANCE_MU_FLAT,DISTANCE_SIGMA_FLAT,distanceFromCenter))
+        if (abs(trackDifferential)) <= DIFFERENTIAL_FLAT: # If track is straight(ish) !TODO: no rewarid on position wrt center?
+            speedReward = logiticDistFct(SPEED_COEF_FLAT,SPEED_INTER_FLAT,speed)
+            positionReward = stdDistFct(DISTANCE_MU_FLAT,DISTANCE_SIGMA_FLAT,distanceFromCenter)
+            reward +=  speedReward + positionReward
             if abs(params["steering_angle"]) < MAXSTEERINGANGLE_FLAT:
                 reward += 1
-        elif (abs(trackDifferential)) <= 2:
-            reward += stdDistFct(SPEED_MU_STARTCURVE,SPEED_SIGMA_STARTCURVE,speed)
-            debugList.append(stdDistFct(SPEED_MU_STARTCURVE,SPEED_SIGMA_STARTCURVE,speed))
-            reward += stdDistFct(DISTANCE_MU_STARTCURVE,DISTANCE_SIGMA_STARTCURVE,distanceFromCenter)
-            debugList.append(stdDistFct(DISTANCE_MU_STARTCURVE,DISTANCE_SIGMA_STARTCURVE,distanceFromCenter))
+            debugList.append((speedReward,positionReward))
+        elif (abs(trackDifferential)) <= DIFFERENTIAL_STARTCURVE: #if we're getting to a turn
+            speedReward = stdDistFct(SPEED_MU_STARTCURVE,SPEED_SIGMA_STARTCURVE,speed)
+            positionReward = stdDistFct(DISTANCE_MU_STARTCURVE,DISTANCE_SIGMA_STARTCURVE,distanceFromCenter)
+            reward +=  speedReward + positionReward
             if  ((direction == -1) and not(params['is_left_of_center'])) or ((direction == 1) and params['is_left_of_center']):
                 reward += .5
             if abs(params["steering_angle"]) < MAXSTEERINGANGLE_STARTCURVE:
                 reward += 1
-        else: #(abs(trackDirection - forecastTrackDirection)) > MAXSTEERINGANGLE_TURN:
-            reward += stdDistFct(SPEED_MU_TURN,SPEED_SIGMA_TURN,speed)
-            debugList.append(stdDistFct(SPEED_MU_TURN,SPEED_SIGMA_TURN,speed))
-            reward += stdDistFct(DISTANCE_MU_TURN,DISTANCE_SIGMA_TURN,distanceFromCenter)
-            debugList.append(stdDistFct(DISTANCE_MU_TURN,DISTANCE_SIGMA_TURN,distanceFromCenter))
+            debugList.append((speedReward,positionReward))    
+        else: #(abs(trackDirection - forecastTrackDirection)) > MAXSTEERINGANGLE_TURN: !TODO: reward on steering angle?
+            speedReward = stdDistFct(SPEED_MU_TURN,SPEED_SIGMA_TURN,speed)
+            positionReward = stdDistFct(DISTANCE_MU_TURN,DISTANCE_SIGMA_TURN,distanceFromCenter)
+            reward +=  speedReward + positionReward
             if  ((direction == -1) and not(params['is_left_of_center'])) or ((direction == 1) and params['is_left_of_center']):
                 reward += 1
             #if abs(params["steering_angle"]) < MAXSTEERINGANGLE_TURN:
             #    reward += 1
-
-    debugList.append(reward)
-    debugList.append(params['is_offtrack'])
-
+            debugList.append((speedReward,positionReward))
+            
     #Debug
     #DEBUG;x;y;previousPointID;previousPointX;previousPointY;heading;trackwidth;distanceFromCenter;%DistanceFromCenter;Speed;previousWaypoint;NextWaypoint;ForecastedWayPoint;TrackDirection;ForecastTrackDirection;TrackDifferential;abs(heading);Direction;isLeftOfCenter;speedReward;positionReward;reward;isOffTrack
+    debugList.append(reward)
+    debugList.append(params['is_offtrack'])
     print(*debugList, sep=";")
 
     return reward
